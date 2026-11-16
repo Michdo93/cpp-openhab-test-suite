@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['*']
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev nlohmann-json3-dev cmake build-essential
+      - name: Build (downloads cpp-openhab-rest-client 2.0.0)
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: openHAB with the exercise configuration
+        run: bash .github/openhab/start.sh
+        env:
+          EXERCISE_CONF: ${{ github.workspace }}/test/openhab-conf
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+      - name: openHAB log
+        if: failure()
+        run: tail -n 100 ~/openhab/openhab.out ~/openhab/userdata/logs/openhab.log || true
