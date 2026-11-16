@@ -17,27 +17,25 @@ else()
   set(OPENHAB_TESTSUITE_TOP_LEVEL OFF)
 endif()
 option(OPENHAB_TESTSUITE_BUILD_TESTS "Build the tests of the test suite" ${OPENHAB_TESTSUITE_TOP_LEVEL})
+option(OPENHAB_TESTSUITE_INSTALL "Generate install rules" ${OPENHAB_TESTSUITE_TOP_LEVEL})
 set(OPENHAB_REST_CLIENT_DIR "" CACHE PATH "Source directory of cpp-openhab-rest-client (optional)")
 
 # ── cpp-openhab-rest-client: target already there, local sources, installed or download ──
-if(NOT TARGET openhab_rest_client_cpp_static)
+if(NOT TARGET openhab::rest_client_cpp)
   if(OPENHAB_REST_CLIENT_DIR)
     add_subdirectory(${OPENHAB_REST_CLIENT_DIR} cpp-openhab-rest-client)
   else()
     find_package(OpenHABRestClientCpp 2 CONFIG QUIET)
     if(NOT OpenHABRestClientCpp_FOUND)
       include(FetchContent)
+      # an installed test suite needs the client installed alongside
+      set(OPENHAB_INSTALL ${OPENHAB_TESTSUITE_INSTALL} CACHE BOOL "" FORCE)
       FetchContent_Declare(cpp_openhab_rest_client
         GIT_REPOSITORY https://github.com/Michdo93/cpp-openhab-rest-client.git
-        GIT_TAG 3aa4c94a026e871d698f50ec8be301c5d12cd4fb)   # 2.0.0
+        GIT_TAG 7c0364552cf3e55068ad9d658d166401b9373918)   # 2.0.0
       FetchContent_MakeAvailable(cpp_openhab_rest_client)
     endif()
   endif()
-endif()
-if(TARGET openhab_rest_client_cpp_static)
-  set(OPENHAB_REST_CLIENT openhab_rest_client_cpp_static)
-else()
-  set(OPENHAB_REST_CLIENT openhab::openhab_rest_client_cpp_static)
 endif()
 
 # ── Library ───────────────────────────────────────────────────────────────────
@@ -49,11 +47,13 @@ set_target_properties(openhab_test_suite_cpp PROPERTIES POSITION_INDEPENDENT_COD
 target_include_directories(openhab_test_suite_cpp PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-target_link_libraries(openhab_test_suite_cpp PUBLIC ${OPENHAB_REST_CLIENT})
+target_link_libraries(openhab_test_suite_cpp PUBLIC openhab::rest_client_cpp)
 target_compile_features(openhab_test_suite_cpp PUBLIC cxx_std_17)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(openhab_test_suite_cpp PRIVATE -Wall -Wextra)
 endif()
+# the same name in the build tree and after find_package(OpenHABTestSuiteCpp)
+set_target_properties(openhab_test_suite_cpp PROPERTIES EXPORT_NAME test_suite_cpp)
 add_library(openhab::test_suite_cpp ALIAS openhab_test_suite_cpp)
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -69,18 +69,20 @@ if(OPENHAB_TESTSUITE_BUILD_TESTS AND NOT CMAKE_CROSSCOMPILING)
 endif()
 
 # ── Install ───────────────────────────────────────────────────────────────────
-include(GNUInstallDirs)
-install(TARGETS openhab_test_suite_cpp EXPORT OpenHABTestSuiteCppTargets
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-install(EXPORT OpenHABTestSuiteCppTargets NAMESPACE openhab::
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenHABTestSuiteCpp)
-file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/OpenHABTestSuiteCppConfig.cmake
-"include(CMakeFindDependencyMacro)
-find_dependency(OpenHABRestClientCpp 2)
-include(\${CMAKE_CURRENT_LIST_DIR}/OpenHABTestSuiteCppTargets.cmake)
-")
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/OpenHABTestSuiteCppConfig.cmake
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenHABTestSuiteCpp)
+if(OPENHAB_TESTSUITE_INSTALL)
+  include(GNUInstallDirs)
+  install(TARGETS openhab_test_suite_cpp EXPORT OpenHABTestSuiteCppTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  install(EXPORT OpenHABTestSuiteCppTargets NAMESPACE openhab::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenHABTestSuiteCpp)
+  file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/OpenHABTestSuiteCppConfig.cmake
+  "include(CMakeFindDependencyMacro)
+  find_dependency(OpenHABRestClientCpp 2)
+  include(\${CMAKE_CURRENT_LIST_DIR}/OpenHABTestSuiteCppTargets.cmake)
+  ")
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/OpenHABTestSuiteCppConfig.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/OpenHABTestSuiteCpp)
+endif()
 
 message(STATUS "cpp-openhab-test-suite ${PROJECT_VERSION}")
